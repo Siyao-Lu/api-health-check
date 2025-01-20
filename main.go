@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -29,6 +30,9 @@ type Stats struct {
 	totalRequests int
 	upRequests int
 }
+
+// reusable HTTP client with timeout to prevent hanging requests
+var httpClient = &http.Client{ Timeout: 2 * time.Second }
 
 func main() {
 	// 1. Accept an input argument to a file path
@@ -77,12 +81,12 @@ func parseFile(path string) ([]Endpoint, error) {
 	// 1. Read input config file
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatalf("Error reading file: %v", err)
+		return nil, err
 	}
 	var endpoints []Endpoint
 	// 2. parse YAML into endpoints slice
 	if err := yaml.Unmarshal(data, &endpoints); err != nil {
-		log.Fatalf("Error parsing YAML file: %v", err)
+		return nil, err
 	}
 	// 3. fill in method - empty default to GET
 	for i := range endpoints {
@@ -100,37 +104,46 @@ func parseFile(path string) ([]Endpoint, error) {
 
 // Health check
 func runCheck(endpoints []Endpoint, stats map[string]*Stats) {
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10) // rate limit to 10
 	for _, endpoint := range endpoints {
-		startTime := time.Now() // for calculating response latency
-		// 1. Create HTTP request
-		req, err := http.NewRequest(endpoint.Method, endpoint.URL, strings.NewReader(endpoint.Body))
-		if err != nil {
-			// since this is valid url from previou check -> assume DOWN
-			updateStats(stats, endpoint.URL, false)
-			continue;
-		}
-		// 2. Add headers to request
-		for k, v := range endpoint.Headers {
-			req.Header.Add(k, v)
-		}
-		// 3. Send request
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			// no response -> assume DOWN
-			updateStats(stats, endpoint.URL, false)
-			continue;
-		}
-		latency := time.Since(startTime)
-		// 4. UP only when any 200–299 response code && latency < 500 ms
-		defer resp.Body.Close()
-		checkStatus := resp.StatusCode >= 200 && resp.StatusCode < 300
-		checkLatency := latency < 500 * time.Millisecond
-		if checkStatus && checkLatency {
-			updateStats(stats, endpoint.URL, true)
-		} else {
-			updateStats(stats, endpoint.URL, false)
-		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(endpoint Endpoint) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			startTime := time.Now() // for calculating response latency
+			// 1. Create HTTP request
+			req, err := http.NewRequest(endpoint.Method, endpoint.URL, strings.NewReader(endpoint.Body))
+			if err != nil {
+				// since this is valid url from previou check -> assume DOWN
+				updateStats(stats, endpoint.URL, false)
+				return
+			}
+			// 2. Add headers to request
+			for k, v := range endpoint.Headers {
+				req.Header.Add(k, v)
+			}
+			// 3. Send request
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				// no response -> assume DOWN
+				updateStats(stats, endpoint.URL, false)
+				return
+			}
+			defer resp.Body.Close()
+			latency := time.Since(startTime)
+			// 4. UP only when any 200–299 response code && latency < 500 ms
+			checkStatus := resp.StatusCode >= 200 && resp.StatusCode < 300
+			checkLatency := latency < 500 * time.Millisecond
+			if checkStatus && checkLatency {
+				updateStats(stats, endpoint.URL, true)
+			} else {
+				updateStats(stats, endpoint.URL, false)
+			}
+		}(endpoint)
 	}
+	wg.Wait() // wait for all goroutines to finish
 }
 
 // Log availability percentages to the console
