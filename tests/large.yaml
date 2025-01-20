@@ -1,0 +1,91 @@
+- name: slow-down-endpoint
+  url: https://httpstat.us/200?sleep=5000
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
+- name: slow-up-endpoint
+  url: https://httpstat.us/200?sleep=4999
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
+- name: timeout-endpoint
+  url: https://httpstat.us/200?sleep=10000
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
+- name: redirect-endpoint
+  url: https://httpstat.us/301
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
+- name: not-found-endpoint
+  url: https://httpstat.us/404
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
+- name: internal-server-error-endpoint
+  url: https://httpstat.us/500
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
+- name: jsonplaceholder-get
+  url: https://jsonplaceholder.typicode.com/posts/1
+  method: GET
+  headers:
+    Accept: "application/json"
+  body: ""
+
+- name: jsonplaceholder-post
+  url: https://jsonplaceholder.typicode.com/posts
+  method: POST
+  headers:
+    Content-Type: "application/json"
+  body: '{"title": "foo", "body": "bar", "userId": 1}'
+
+- name: golang-home
+  url: https://golang.org/
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
+- name: google-search
+  url: https://www.google.com/search?q=golang
+  method: GET
+  headers:
+    User-Agent: "Mozilla/5.0"
+  body: ""
+
+- name: wikipedia-home
+  url: https://www.wikipedia.org/
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
+- name: github-api
+  url: https://api.github.com/
+  method: GET
+  headers:
+    Accept: "application/vnd.github.v3+json"
+  body: ""
+
+- name: stackoverflow
+  url: https://stackoverflow.com/
+  method: GET
+  headers:
+    Accept: "text/html"
+  body: ""
+
